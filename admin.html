@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>لوحة التحكم - متجر باقات الورد</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Firebase compat SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-storage-compat.js"></script>
+
+  <script src="firebase-config.js"></script>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans">
+  <div class="max-w-3xl mx-auto p-4">
+    <header class="flex items-center justify-between mb-4">
+      <h1 class="text-2xl font-bold">لوحة التحكم</h1>
+      <div id="userArea"></div>
+    </header>
+
+    <section id="authSection" class="bg-white rounded shadow p-4">
+      <h2 class="font-semibold mb-2">تسجيل دخول المدير</h2>
+      <form id="loginForm" class="grid grid-cols-1 gap-2">
+        <input id="email" type="email" placeholder="البريد الإلكتروني" class="border rounded p-2" required />
+        <input id="password" type="password" placeholder="كلمة المرور" class="border rounded p-2" required />
+        <div class="flex gap-2">
+          <button class="bg-pink-600 text-white px-4 py-2 rounded" type="submit">دخول</button>
+          <button id="logoutBtn" class="px-4 py-2 border rounded hidden" type="button">خروج</button>
+        </div>
+        <div id="authMsg" class="text-sm text-red-600"></div>
+      </form>
+    </section>
+
+    <section id="adminSection" class="hidden mt-4">
+      <div class="bg-white rounded shadow p-4">
+        <h2 class="font-semibold mb-2">إضافة / تعديل باقة</h2>
+        <form id="productForm" class="grid grid-cols-1 gap-2">
+          <input id="name_ar" placeholder="اسم الباقة (عربي)" class="border rounded p-2" required />
+          <input id="name_en" placeholder="Name (English)" class="border rounded p-2" />
+          <textarea id="desc_ar" placeholder="وصف (عربي)" class="border rounded p-2"></textarea>
+          <textarea id="desc_en" placeholder="Description (English)" class="border rounded p-2"></textarea>
+          <input id="price" type="number" placeholder="السعر (د.ع)" class="border rounded p-2" required />
+          <input id="image" type="file" accept="image/*" class="border rounded p-2" />
+          <div class="flex gap-2">
+            <button class="bg-green-600 text-white px-4 py-2 rounded" type="submit">حفظ</button>
+            <button id="cancelEdit" type="button" class="px-4 py-2 border rounded hidden">إلغاء التعديل</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="bg-white rounded shadow p-4 mt-4">
+        <h3 class="font-semibold mb-2">قائمة الباقات</h3>
+        <div id="list"></div>
+      </div>
+    </section>
+  </div>
+
+<script>
+const auth = firebase.auth();
+const db = firebase.firestore();
+const storage = firebase.storage();
+
+const adminEmail = 'admin@flowershop.com'; // allowed admin email
+
+const loginForm = document.getElementById('loginForm');
+const authMsg = document.getElementById('authMsg');
+const authSection = document.getElementById('authSection');
+const adminSection = document.getElementById('adminSection');
+const logoutBtn = document.getElementById('logoutBtn');
+const userArea = document.getElementById('userArea');
+
+let editId = null;
+
+auth.onAuthStateChanged(user=>{
+  if(user && user.email === adminEmail){
+    // show admin panel
+    adminSection.classList.remove('hidden');
+    logoutBtn.classList.remove('hidden');
+    loginForm.querySelector('button[type=submit]').classList.add('hidden');
+    userArea.innerHTML = `<div class="text-sm">مرحباً، ${user.email}</div>`;
+    loadList();
+  } else {
+    adminSection.classList.add('hidden');
+    logoutBtn.classList.add('hidden');
+    loginForm.querySelector('button[type=submit]').classList.remove('hidden');
+    userArea.innerHTML = '';
+  }
+});
+
+loginForm.addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value.trim();
+  authMsg.textContent = '';
+  try {
+    await auth.signInWithEmailAndPassword(email, password);
+  } catch(err){
+    authMsg.textContent = err.message;
+  }
+});
+
+logoutBtn.addEventListener('click', ()=> auth.signOut());
+
+// Add / edit product
+const productForm = document.getElementById('productForm');
+productForm.addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const name_ar = document.getElementById('name_ar').value.trim();
+  const name_en = document.getElementById('name_en').value.trim();
+  const desc_ar = document.getElementById('desc_ar').value.trim();
+  const desc_en = document.getElementById('desc_en').value.trim();
+  const price = Number(document.getElementById('price').value || 0);
+  const file = document.getElementById('image').files[0];
+
+  let imageUrl = '';
+  if(file){
+    const ref = storage.ref().child('product_images/'+Date.now()+'_'+file.name);
+    const snap = await ref.put(file);
+    imageUrl = await snap.ref.getDownloadURL();
+  }
+
+  const doc = {
+    name_ar, name_en, desc_ar, desc_en, price, imageUrl, createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+
+  try {
+    if(editId){
+      await db.collection('products').doc(editId).update(doc);
+      alert('تم التعديل');
+      editId = null;
+      document.getElementById('cancelEdit').classList.add('hidden');
+    } else {
+      await db.collection('products').add(doc);
+      alert('تم الإضافة');
+    }
+    productForm.reset();
+  } catch(err){
+    alert(err.message);
+  }
+});
+
+// Load list
+function loadList(){
+  db.collection('products').orderBy('createdAt','desc').onSnapshot(snapshot=>{
+    const list = document.getElementById('list');
+    list.innerHTML = '';
+    snapshot.forEach(doc=>{
+      const p = doc.data();
+      const el = document.createElement('div');
+      el.className = 'flex items-center justify-between p-2 border-b';
+      el.innerHTML = `
+        <div>
+          <div class="font-semibold">${p.name_ar || p.name_en}</div>
+          <div class="text-xs text-gray-600">${(p.price||0).toLocaleString()} د.ع</div>
+        </div>
+        <div class="flex gap-2">
+          <button class="px-2 py-1 border rounded" onclick="editProduct('${"${doc.id}"}')">تعديل</button>
+          <button class="px-2 py-1 border rounded text-red-600" onclick="deleteProduct('${"${doc.id}"}')">حذف</button>
+        </div>
+      `;
+      list.appendChild(el);
+    });
+  });
+}
+
+window.editProduct = async function(id){
+  const doc = await db.collection('products').doc(id).get();
+  const p = doc.data();
+  document.getElementById('name_ar').value = p.name_ar || '';
+  document.getElementById('name_en').value = p.name_en || '';
+  document.getElementById('desc_ar').value = p.desc_ar || '';
+  document.getElementById('desc_en').value = p.desc_en || '';
+  document.getElementById('price').value = p.price || 0;
+  editId = id;
+  document.getElementById('cancelEdit').classList.remove('hidden');
+};
+
+document.getElementById('cancelEdit').addEventListener('click', (e)=>{
+  e.preventDefault();
+  productForm.reset();
+  editId = null;
+  document.getElementById('cancelEdit').classList.add('hidden');
+});
+
+window.deleteProduct = async function(id){
+  if(!confirm('هل تريد حذف هذه الباقة؟')) return;
+  try{
+    await db.collection('products').doc(id).delete();
+    alert('تم الحذف');
+  } catch(err){ alert(err.message); }
+};
+</script>
+</body>
+</html>

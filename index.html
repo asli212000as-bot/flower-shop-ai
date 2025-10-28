@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>متجر باقات الورد — Flower Shop AI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Firebase compat SDK (uses namespace `firebase`) -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-storage-compat.js"></script>
+
+  <script src="firebase-config.js"></script>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans">
+  <header class="max-w-5xl mx-auto flex items-center justify-between p-4">
+    <div class="flex items-center gap-3">
+      <h1 class="text-2xl font-bold">🌸 متجر باقات الورد</h1>
+      <span class="text-sm text-gray-500">AI-powered</span>
+    </div>
+    <div class="flex items-center gap-3">
+      <button id="langBtn" class="px-3 py-1 border rounded text-sm">English</button>
+      <a class="text-sm underline" href="admin.html" target="_blank">لوحة التحكم</a>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto p-4">
+    <section>
+      <h2 id="title" class="text-xl font-semibold mb-4">الباقات المتاحة</h2>
+      <div id="products" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4"></div>
+    </section>
+  </main>
+
+  <footer class="text-center text-xs text-gray-500 py-6">© 2025 متجر باقات الورد</footer>
+
+<script>
+// Config
+const WHATSAPP_NUMBER = "+9647766611050"; // your number (international format)
+let LANG = 'ar'; // or 'en'
+
+const db = firebase.firestore();
+const storage = firebase.storage();
+
+function formatCurrency(n){ return n.toLocaleString(); }
+
+function renderProducts(docs){
+  const container = document.getElementById('products');
+  container.innerHTML = '';
+  docs.forEach(doc=>{
+    const p = doc.data();
+    const name = (LANG==='ar' ? (p.name_ar || p.name_en) : (p.name_en || p.name_ar));
+    const desc = (LANG==='ar' ? (p.desc_ar || p.desc_en) : (p.desc_en || p.desc_ar));
+    const price = p.price || 0;
+    const img = p.imageUrl || 'https://images.unsplash.com/photo-1511988617509-a57c8a288659?auto=format&fit=crop&w=800&q=60';
+    const card = document.createElement('div');
+    card.className = 'bg-white rounded shadow p-3 flex flex-col';
+    card.innerHTML = `
+      <img src="${img}" alt="${name}" class="h-44 w-full object-cover rounded mb-2" />
+      <h3 class="font-semibold text-lg">${name}</h3>
+      <p class="text-sm text-gray-600 my-2">${desc || ''}</p>
+      <div class="mt-auto flex items-center justify-between">
+        <div class="font-bold text-pink-700">${formatCurrency(price)} د.ع</div>
+        <div class="flex gap-2">
+          <button class="px-2 py-1 bg-green-600 text-white rounded text-sm" onclick="addToCart('${"${doc.id}"}')">أضف للسلة</button>
+          <button class="px-2 py-1 border rounded text-sm" onclick="openWhatsApp('${"${name}"}', ${"${price}"})">واتساب</button>
+        </div>
+      </div>
+    `;
+    container.appendChild(card);
+  });
+}
+
+// Fetch products realtime
+db.collection('products').orderBy('createdAt','desc').onSnapshot(snapshot=>{
+  renderProducts(snapshot.docs);
+});
+
+// Language toggle
+document.getElementById('langBtn').addEventListener('click', ()=>{
+  LANG = LANG === 'ar' ? 'en' : 'ar';
+  document.documentElement.dir = LANG === 'ar' ? 'rtl' : 'ltr';
+  document.getElementById('title').textContent = LANG === 'ar' ? 'الباقات المتاحة' : 'Available Bouquets';
+  document.getElementById('langBtn').textContent = LANG === 'ar' ? 'English' : 'العربية';
+  // re-fetch handled by onSnapshot (fields chosen during render)
+});
+
+// Simple cart (local)
+const CART = {};
+function addToCart(id){
+  CART[id] = (CART[id]||0)+1;
+  alert(LANG==='ar'?'أضيفت للسلة':'Added to cart');
+}
+
+// WhatsApp order
+function openWhatsApp(name, price){
+  const text = LANG==='ar' ? `مرحباً، أود طلب باقة: ${name} بسعر ${price} د.ع` : `Hello, I want to order bouquet: ${name} price ${price}`;
+  const url = `https://wa.me/${WHATSAPP_NUMBER.replace('+','')}?text=${encodeURIComponent(text)}`;
+  window.open(url,'_blank');
+}
+</script>
+</body>
+</html>
