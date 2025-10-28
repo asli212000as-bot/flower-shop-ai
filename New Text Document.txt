@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin - Flower Shop</title>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    input, button { display: block; margin: 10px 0; }
+  </style>
+</head>
+<body>
+
+<h1>لوحة إدارة باقات الورود</h1>
+
+<label>اسم الباقة:</label>
+<input type="text" id="flowerName" placeholder="أدخل اسم الباقة">
+
+<label>اختر صورة الباقة:</label>
+<input type="file" id="flowerImage">
+
+<button id="saveBtn">حفظ الباقة</button>
+
+<hr>
+<h2>الباقات الموجودة:</h2>
+<ul id="flowerList"></ul>
+
+<script>
+  // ======= إعداد Firebase =======
+  const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_PROJECT_ID.appspot.com",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId: "YOUR_APP_ID"
+  };
+
+  // تهيئة Firebase
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+  const storage = firebase.storage();
+
+  // ======= حفظ الباقة =======
+  document.getElementById('saveBtn').addEventListener('click', async () => {
+    const name = document.getElementById('flowerName').value.trim();
+    const file = document.getElementById('flowerImage').files[0];
+
+    if (!name || !file) {
+      alert("الرجاء إدخال اسم الباقة واختيار صورة!");
+      return;
+    }
+
+    try {
+      // رفع الصورة إلى Firebase Storage
+      const storageRef = storage.ref('flowers/' + file.name);
+      const snapshot = await storageRef.put(file);
+      const imageUrl = await snapshot.ref.getDownloadURL();
+
+      // حفظ البيانات في Firestore
+      await db.collection('flowers').add({
+        name: name,
+        imageUrl: imageUrl,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+      alert("تم حفظ الباقة بنجاح!");
+      document.getElementById('flowerName').value = '';
+      document.getElementById('flowerImage').value = '';
+
+      loadFlowers(); // تحديث القائمة
+    } catch (error) {
+      console.error(error);
+      alert("حدث خطأ أثناء حفظ الباقة.");
+    }
+  });
+
+  // ======= تحميل وعرض الباقات =======
+  async function loadFlowers() {
+    const list = document.getElementById('flowerList');
+    list.innerHTML = '';
+    const snapshot = await db.collection('flowers').orderBy('createdAt', 'desc').get();
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      const li = document.createElement('li');
+      li.innerHTML = `<strong>${data.name}</strong> <br> <img src="${data.imageUrl}" width="100">`;
+      list.appendChild(li);
+    });
+  }
+
+  loadFlowers();
+</script>
+
+</body>
+</html>
